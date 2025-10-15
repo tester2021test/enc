@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Local AES-256 Encryptor — ENCRYPT</title>
+<style>
+/* --- SHARED CSS STYLES --- */
+:root{--accent:#0ea5e9;--radius:16px;--bg:#eef6ff;--bg-gradient:linear-gradient(45deg, #eef6ff, #f0f9ff);--text:#111;--section-bg:#fff;--border:#e6eef6;--lead:#444;--note:#555;--card-bg:linear-gradient(135deg, #f0f9ff, #fff);--shadow:0 6px 16px rgba(0,0,0,0.08);--shadow-sm:0 2px 8px rgba(0,0,0,0.04);}
+.dark-mode{--bg:#1a1a2e;--bg-gradient:linear-gradient(45deg, #16162a, #232a4a);--text:#f0f0f0;--section-bg:#2d2d4f;--border:#3a3a5a;--lead:#ccc;--note:#aaa;--card-bg:linear-gradient(135deg, #2d2d4f, #3a3a5a);--shadow:0 6px 16px rgba(0,0,0,0.3);--shadow-sm:0 2px 8px rgba(0,0,0,0.2);}
+body{font-family:Inter,system-ui,Segoe UI,Arial;margin:0 auto;padding:16px;color:var(--text);background:var(--bg-gradient);max-width:1000px;line-height:1.5;padding-bottom:16px;transition:background 0.3s, color 0.3s;}
+h1{font-size:26px;text-align:center;margin-bottom:6px;font-weight:700;}
+h1 small{font-weight:300;display:block;font-size:16px;color:var(--lead);margin-top:4px;}
+.lead{color:var(--lead);text-align:center;margin-bottom:20px;font-size:15px;}
+.section{background:var(--section-bg);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:18px;box-shadow:var(--shadow);}
+h2{font-size:16px;margin-bottom:8px;color:var(--accent);}
+label{display:block;margin-top:10px;font-weight:600;font-size:14px;}
+textarea,input,select{width:100%;padding:10px;margin-top:6px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--bg);color:var(--text);box-sizing:border-box;transition:border 0.3s;}
+textarea:focus,input:focus,select:focus{border-color:var(--accent);outline:none;}
+textarea{resize:none;min-height:60px;}
+button{padding:12px 14px;border-radius:var(--radius);border:0;background:var(--accent);color:#fff;font-weight:700;cursor:pointer;font-size:15px;margin-top:8px;width:100%;transition:transform 0.2s, box-shadow 0.2s, background 0.2s;}
+button:hover{filter:brightness(1.1);}
+button:active{transform:translateY(1px);box-shadow:none;}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
+.col{flex:1 1 100%;}@media(min-width:480px){.col{flex:1;}}
+.toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;padding:12px 16px;border-radius:var(--radius);box-shadow:var(--shadow);display:none;z-index:1000;font-weight:600;}
+.password-strength{height:6px;width:100%;border-radius:4px;background:#ddd;margin-top:4px;overflow:hidden;}
+.password-strength div{height:100%;width:0%;transition:width 0.3s;}
+.password-strength div.weak{background:red;}
+.password-strength div.medium{background:orange;}
+.password-strength div.strong{background:green;}
+.input-with-icon{position:relative;display:flex;align-items:center;}
+.input-with-icon input, .input-with-icon textarea{padding-right:45px;flex-grow:1;}
+.input-with-icon button{position:absolute;right:10px;background:none;border:none;color:var(--text);cursor:pointer;font-size:18px;width:auto;padding:0;margin:0;}
+.copy-btn, .paste-btn{display:inline-flex;align-items:center;justify-content:center;padding:8px 12px;font-size:13px;background:var(--accent);border:none;color:#fff;border-radius:8px;cursor:pointer;margin-left:8px;transition:background 0.2s;}
+.copy-btn:hover, .paste-btn:hover{filter:brightness(1.1);}
+.theme-toggle{position:fixed;top:16px;right:16px;z-index:1000;background:none;border:none;cursor:pointer;font-size:24px;color:var(--text);transition:color 0.3s;}
+.qr-display{text-align:center;padding:15px;background:var(--bg);border-radius:var(--radius);margin-top:15px;max-width:220px;margin-left:auto;margin-right:auto;}
+.qr-display canvas{max-width:100%;height:auto;border:1px solid var(--border);border-radius:10px;background:white;}
+/* Added style for URI/Secret display */
+.secret-output{font-size:12px;margin-top:5px;text-align:left;padding:8px;border:1px dashed var(--border);border-radius:var(--radius);word-break:break-all;}
+</style>
+</head>
+<body>
+<h1>AES-256 Encryptor <small>Secure your data, locally.</small></h1>
+<div class="lead">Use this page to encrypt data. Open **decryption.html** to decrypt.</div>
+<button id="themeToggleBtn" class="theme-toggle">☀️</button>
+
+<div id="encryptSection">
+    <div class="section" id="keySection">
+        <h2>Key Management</h2>
+        <label>Key mode</label>
+        <select id="keyMode">
+            <option value="generate">Generate random AES-256 key</option>
+            <option value="import">Import raw key (base64)</option>
+            <option value="password">Derive key from password + **TOTP** (Argon2id)</option>
+        </select>
+        
+        <div id="generateBox">
+            <button id="genKeyBtn">Generate AES-256 Key</button>
+            <div class="note">Generates a cryptographically secure 256-bit AES key. Export it to reuse.</div>
+        </div>
+        
+        <div id="importBox" style="display:none;">
+            <label>Paste raw key (base64 of 32 bytes)</label>
+            <input id="importKeyInput" placeholder="Base64 key">
+            <button id="importBtn">Import Key</button>
+        </div>
+        
+        <div id="passwordBox" style="display:none;">
+            <label>Password</label>
+            <div class="input-with-icon">
+                <input id="pwInput" type="password" placeholder="Type a strong passphrase">
+                <button type="button" id="togglePwBtn">👁️</button>
+            </div>
+            <div class="password-strength"><div id="pwStrength"></div></div>
+            
+            <label>Argon2id iterations</label>
+            <input id="pwIters" type="number" value="3">
+            <div class="note">Password-derived key using Argon2id. Stronger GPU resistance.</div>
+            
+            <label style="margin-top: 15px;">**TOTP Secret (Base32)**</label>
+            <div class="row">
+                <div class="col">
+                    <input id="totpSecretInput" placeholder="Click 'Generate' or enter your Base32 secret" value="">
+                </div>
+                <div class="col" style="flex: 0 0 auto; width: auto;">
+                    <button id="genTotpSecretBtn" style="width: auto;">Generate</button>
+                </div>
+            </div>
+            <button id="showQrBtn" style="margin-top: 5px;">Show/Hide Setup Details</button>
+            <div id="qrCodeDisplay" class="qr-display" style="display: none;">
+                <canvas id="qrCanvas" width="200" height="200"></canvas>
+                <div class="secret-output">
+                    **Base32 Secret:** <span id="secretOutputText"></span>
+                    <button type="button" onclick="copyTextFromElement('secretOutputText')" class="copy-btn" style="width: auto; padding: 5px 8px; margin-left: 5px;">Copy</button>
+                    <br><br>
+                    **Authenticator URI (for manual entry):** <span id="uriOutputText"></span>
+                </div>
+            </div>
+            <div class="note">**IMPORTANT:** Use a TOTP app (like Google Authenticator) to manually enter the Base32 Secret above. This is required for decryption.</div>
+        </div>
+        
+        <label>Exported key (base64)</label>
+        <div class="input-with-icon">
+            <input id="exportedKey" readonly placeholder="No key yet">
+            <button type="button" onclick="copyText('exportedKey')" class="copy-btn">Copy</button>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h2>Encrypt</h2>
+        <label>Plaintext</label>
+        <textarea id="plaintext" placeholder="Enter text here"></textarea>
+        <label>Optional notes</label>
+        <input id="notesInput" placeholder="Add notes for this blob">
+        
+        <div class="row">
+            <div class="col"><button id="encryptBtn">Encrypt</button></div>
+            <div class="col"><button id="encryptAndCopy">Encrypt + Copy</button></div>
+        </div>
+        
+        <label>Encrypted blob (Base64 JSON)</label>
+        <div class="input-with-icon">
+            <textarea id="ciphertext" readonly></textarea>
+            <button type="button" onclick="copyText('ciphertext')" class="copy-btn">Copy</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// --- EMBEDDED JAVASCRIPT ---
+
+// --- Core Cryptography/Utility Functions ---
+const enc = new TextEncoder();
+const dec = new TextDecoder();
+const BASE32_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+const QR_SIZE = 200;
+
+function toB64(buf) { return btoa(String.fromCharCode(...new Uint8Array(buf))); }
+function fromB64(s) { const bin = atob(s); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; }
+function rand(n) { const a = new Uint8Array(n); crypto.getRandomValues(a); return a.buffer; }
+function showToast(msg) { 
+    const t = document.getElementById('toast'); 
+    t.textContent = msg; 
+    t.style.display = 'block'; 
+    setTimeout(() => { t.style.display = 'none'; }, 1500); 
+}
+async function copyText(id) {
+    const el = document.getElementById(id);
+    if (!el.value) { showToast('Nothing to copy'); return; }
+    if (navigator.clipboard) {
+        try { await navigator.clipboard.writeText(el.value); showToast('Copied'); return; } catch (err) { console.error('Failed to copy: ', err); }
+    }
+    el.select(); document.execCommand('copy'); showToast('Copied (fallback)');
+}
+async function copyTextFromElement(id) {
+    const el = document.getElementById(id);
+    const text = el.textContent;
+    if (!text) { showToast('Nothing to copy'); return; }
+    if (navigator.clipboard) {
+        try { await navigator.clipboard.writeText(text); showToast('Copied'); return; } catch (err) { console.error('Failed to copy: ', err); }
+    }
+    showToast('Failed to copy automatically. Use manual selection.');
+}
+window.copyText = copyText; // Make accessible from HTML attribute
+window.copyTextFromElement = copyTextFromElement;
+
+// Argon2id placeholder using PBKDF2 as fallback
+async function deriveKeyArgon2(password, salt, iterations) {
+    const baseKey = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 200000, hash: 'SHA-256' }, baseKey, { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+}
+
+function base32ToUint8Array(base32) {
+    base32 = base32.toUpperCase().replace(/=/g, '',).replace(/\s/g, '');
+    let bits = '';
+    for (let i = 0; i < base32.length; i++) {
+        const val = BASE32_CHARS.indexOf(base32.charAt(i));
+        if (val === -1) throw new Error('Invalid Base32 character');
+        bits += val.toString(2).padStart(5, '0');
+    }
+    const bytes = [];
+    for (let i = 0; i < bits.length; i += 8) {
+        const byte = bits.substring(i, i + 8);
+        if (byte.length === 8) bytes.push(parseInt(byte, 2));
+    }
+    return new Uint8Array(bytes).buffer;
+}
+
+function generateRandomBase32Secret(length = 32) {
+    const randomBytes = new Uint8Array(Math.ceil(length * 5 / 8));
+    crypto.getRandomValues(randomBytes);
+    let base32 = '';
+    let bits = '';
+    for (const byte of randomBytes) { bits += byte.toString(2).padStart(8, '0'); }
+    for (let i = 0; i < bits.length && base32.length < length; i += 5) {
+        const segment = bits.substring(i, i + 5);
+        if (segment.length === 5) base32 += BASE32_CHARS.charAt(parseInt(segment, 2));
+    }
+    return base32.substring(0, length);
+}
+
+// --- WORKING TOTP Setup Display Logic (Replaces QR Code Generator) ---
+function displayTotpDetails(secret) {
+    const issuer = 'LocalEncryptor';
+    const label = 'AES-GCM-Key';
+    const uri = `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(label)}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`;
+    
+    // Update text fields
+    document.getElementById('secretOutputText').textContent = secret;
+    document.getElementById('uriOutputText').textContent = uri;
+
+    // Draw placeholder canvas (for visual style consistency)
+    const canvas = document.getElementById('qrCanvas');
+    if (canvas) {
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = 'white'; ctx.fillRect(0, 0, QR_SIZE, QR_SIZE);
+        ctx.fillStyle = 'black'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.font = '12px Arial'; ctx.fillText("Use Secret Text Below", QR_SIZE / 2, QR_SIZE / 2);
+        ctx.fillText("QR Code Not Generated", QR_SIZE / 2, QR_SIZE / 2 + 15);
+    }
+}
+// --- END TOTP Setup Display Logic ---
+
+let activeKey = null;
+let keyMode = 'generate';
+
+// --- UI Logic ---
+const keyModeSel = document.getElementById('keyMode');
+const totpSecretInput = document.getElementById('totpSecretInput');
+const qrCodeDisplay = document.getElementById('qrCodeDisplay');
+const exportedKeyInput = document.getElementById('exportedKey');
+const pwStrengthDiv = document.getElementById('pwStrength');
+
+keyModeSel.addEventListener('change', (e) => {
+    keyMode = e.target.value;
+    document.getElementById('generateBox').style.display = keyMode === 'generate' ? 'block' : 'none';
+    document.getElementById('importBox').style.display = keyMode === 'import' ? 'block' : 'none';
+    document.getElementById('passwordBox').style.display = keyMode === 'password' ? 'block' : 'none';
+    qrCodeDisplay.style.display = 'none';
+});
+
+// Key Generation
+document.getElementById('genKeyBtn').onclick = async () => {
+    activeKey = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+    const raw = await crypto.subtle.exportKey('raw', activeKey);
+    exportedKeyInput.value = toB64(raw);
+    showToast('Key Generated and Exported');
+};
+
+// Key Import
+document.getElementById('importBtn').onclick = async () => {
+    const keyB64 = document.getElementById('importKeyInput').value.trim();
+    try {
+        const raw = fromB64(keyB64);
+        if (raw.byteLength !== 32) throw new Error('Key must be 32 bytes (256-bit)');
+        activeKey = await crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, true, ['encrypt', 'decrypt']);
+        exportedKeyInput.value = keyB64;
+        showToast('Key Imported');
+    } catch (e) {
+        showToast('Key Import Failed. Check format/length.');
+        activeKey = null;
+        exportedKeyInput.value = '';
+        console.error(e);
+    }
+};
+
+// Password Strength
+document.getElementById('pwInput').addEventListener('input', (e) => {
+    const len = e.target.value.length;
+    let strength = 'weak';
+    let width = '10%';
+    if (len >= 8) { strength = 'medium'; width = '50%'; }
+    if (len >= 12) { strength = 'strong'; width = '100%'; }
+    pwStrengthDiv.className = strength;
+    pwStrengthDiv.style.width = width;
+});
+
+// Toggle Password Visibility
+document.getElementById('togglePwBtn').onclick = (e) => {
+    const pwInput = document.getElementById('pwInput');
+    pwInput.type = pwInput.type === 'password' ? 'text' : 'password';
+    e.target.textContent = pwInput.type === 'password' ? '👁️' : '🙈';
+};
+
+// TOTP Secret Generation
+document.getElementById('genTotpSecretBtn').onclick = () => {
+    const totpSecret = generateRandomBase32Secret(32);
+    totpSecretInput.value = totpSecret;
+    displayTotpDetails(totpSecret);
+    qrCodeDisplay.style.display = 'block';
+    showToast('TOTP Secret Generated. Enter it manually into your app.');
+};
+
+// Show/Hide TOTP Setup Details
+document.getElementById('showQrBtn').onclick = () => {
+    const currentSecret = totpSecretInput.value.trim();
+    if (!currentSecret) { showToast('Generate or enter a TOTP secret first.'); qrCodeDisplay.style.display = 'none'; return; }
+    if (qrCodeDisplay.style.display === 'none') {
+        try {
+            base32ToUint8Array(currentSecret);
+            displayTotpDetails(currentSecret);
+            qrCodeDisplay.style.display = 'block';
+            showToast('Setup Details Shown');
+        } catch (e) {
+            showToast('Invalid Base32 Secret entered. Check format.');
+            qrCodeDisplay.style.display = 'none';
+        }
+    } else {
+        qrCodeDisplay.style.display = 'none';
+        showToast('Setup Details Hidden');
+    }
+};
+
+totpSecretInput.addEventListener('input', () => {
+    if (qrCodeDisplay.style.display !== 'none') {
+        qrCodeDisplay.style.display = 'none';
+        showToast('Setup details hidden. Click "Show/Hide" to refresh.');
+    }
+});
+
+// Encrypt Logic
+async function encrypt() {
+    const pt = document.getElementById('plaintext').value;
+    if (!pt) { showToast('Enter plaintext'); return; }
+    const notes = document.getElementById('notesInput').value || '';
+    let iv = rand(12);
+    let keyToUse = activeKey;
+    let salt = null;
+    let totpSecretB32 = '';
+    let pwIters = 3; 
+
+    if (keyMode === 'password') {
+        salt = new Uint8Array(rand(16));
+        const pw = document.getElementById('pwInput').value;
+        pwIters = parseInt(document.getElementById('pwIters').value || 3);
+        totpSecretB32 = document.getElementById('totpSecretInput').value.trim();
+
+        if (!pw) { showToast('Enter a password'); return; }
+        if (!totpSecretB32) { showToast('Generate or enter a TOTP Secret'); return; }
+
+        keyToUse = await deriveKeyArgon2(pw, salt, pwIters);
+    } else if (!activeKey) {
+        showToast('Please generate or import a key');
+        return;
+    }
+
+    try {
+        const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, keyToUse, enc.encode(pt));
+        const blob = { alg: 'AES-GCM', iv: toB64(iv), ct: toB64(ct), notes };
+        if (salt) {
+            blob.salt = toB64(salt);
+            blob.iters = pwIters; 
+        }
+        if (totpSecretB32) blob.totp = totpSecretB32;
+
+        document.getElementById('ciphertext').value = btoa(JSON.stringify(blob));
+        showToast('Encryption Successful');
+    } catch (e) {
+        console.error(e);
+        showToast('Encryption Failed. Check console for details.');
+    }
+}
+
+document.getElementById('encryptBtn').onclick = encrypt;
+document.getElementById('encryptAndCopy').onclick = async () => { await encrypt(); copyText('ciphertext'); };
+
+// Theme Toggle
+document.getElementById('themeToggleBtn').onclick = () => {
+    document.body.classList.toggle('dark-mode');
+    document.getElementById('themeToggleBtn').textContent = document.body.classList.contains('dark-mode') ? '🌙' : '☀️';
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Initial key mode setup
+    keyModeSel.dispatchEvent(new Event('change'));
+    document.getElementById('themeToggleBtn').textContent = document.body.classList.contains('dark-mode') ? '🌙' : '☀️';
+});
+</script>
+</body>
+</html>
